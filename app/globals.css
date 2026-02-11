@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Thin scrollbar for nav popups (kept inside rounded border). */
+.ag-thin-scrollbar {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(67, 20, 7, 0.35) rgba(67, 20, 7, 0.10);
+}
+
+.ag-thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ag-thin-scrollbar::-webkit-scrollbar-track {
+  background: rgba(67, 20, 7, 0.10);
+}
+
+.ag-thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(67, 20, 7, 0.35);
+  border-radius: 9999px;
+}
+
+.ag-thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(67, 20, 7, 0.45);
+}
