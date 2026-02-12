@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -32,24 +33,6 @@ function IconChevronRight(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function IconCalendar(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M7 3v2M17 3v2M4 8h16"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M6.5 5h11A2.5 2.5 0 0 1 20 7.5v12A2.5 2.5 0 0 1 17.5 22h-11A2.5 2.5 0 0 1 4 19.5v-12A2.5 2.5 0 0 1 6.5 5z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
 function IconTag(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
@@ -64,46 +47,54 @@ function IconTag(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .trim()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-const CATEGORIES = [
-  "Nature",
-  "Portraits",
-  "Street",
-  "Architecture",
-  "Still Life",
-  "Abstract",
-  "Travel",
-  "Night",
-  "Minimal",
-  "Documentary",
-  "Macro",
-  "Conceptual",
-  "Motion",
-  "Landscapes",
-] as const;
-
-const EVENTS = [
-  "Graduation Day (Ottawa, 2021)",
-  "Studio Session Vol. 2",
-  "Desert Trip (2022)",
-  "Winter Walks",
-  "Summer Festival (2023)",
-  "Museum Afternoon",
-  "City Lights Night",
-  "Family Gathering",
-] as const;
+type FolderCategory = {
+  dir: string; // relative path inside /public/photos, e.g. "Art/Analog photography"
+  folder: string; // last segment, e.g. "Analog photography"
+  count: number;
+};
 
 export function BottomNav() {
   const [navOpen, setNavOpen] = useState(false);
+  const [folders, setFolders] = useState<FolderCategory[]>([]);
   const categoriesRootRef = useRef<HTMLDivElement | null>(null);
+  const pathname = usePathname();
+
+  const isGallery = pathname === "/";
+  const isAbout = pathname === "/about";
+  const isCategoryPage = pathname.startsWith("/category/");
+
+  useEffect(() => {
+    type PhotoRow = { dir?: unknown; folder?: unknown };
+    const ac = new AbortController();
+    fetch("/api/photos", { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        const map = new Map<string, FolderCategory>();
+
+        for (const row of data as unknown[]) {
+          const r = row as PhotoRow;
+          const dir = typeof r.dir === "string" ? r.dir : "";
+          if (!dir) continue; // we only want deepest folders that actually contain photos
+          const folder =
+            typeof r.folder === "string" ? r.folder : dir.split("/").at(-1) ?? dir;
+          const prev = map.get(dir);
+          map.set(dir, { dir, folder, count: (prev?.count ?? 0) + 1 });
+        }
+
+        const list = Array.from(map.values()).sort((a, b) => {
+          const byName = a.folder.localeCompare(b.folder);
+          if (byName) return byName;
+          return a.dir.localeCompare(b.dir);
+        });
+        setFolders(list);
+      })
+      .catch(() => {
+        // ignore (offline/aborted/etc.)
+      });
+
+    return () => ac.abort();
+  }, []);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -161,64 +152,47 @@ export function BottomNav() {
             >
               <div className="ag-thin-scrollbar max-h-[calc(100vh-10rem)] sm:max-h-[65vh] overflow-auto p-2.5 sm:p-3">
                 <div className="flex items-center gap-2 px-2 pb-2 text-xs font-semibold tracking-[0.18em] text-orange-950/70">
-                  <IconCalendar className="h-4 w-4 text-orange-950/60" />
-                  <span>EVENTS</span>
-                </div>
-                <div className="grid grid-cols-1 gap-1">
-                  {EVENTS.map((ev) => (
-                    <a
-                      key={ev}
-                      href={`/#event-${slugify(ev)}`}
-                      className={[
-                        "group flex items-center justify-between gap-3",
-                        "rounded-xl px-3 py-2 text-sm text-orange-950/80",
-                        "hover:bg-orange-950/10 hover:text-orange-950",
-                      ].join(" ")}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setNavOpen(false);
-                      }}
-                      role="menuitem"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-950/35" />
-                        <span className="min-w-0 truncate">{ev}</span>
-                      </span>
-                      <IconChevronRight className="h-4 w-4 shrink-0 text-orange-950/40 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </a>
-                  ))}
-                </div>
-
-                <div className="my-3 h-px bg-orange-950/15" />
-
-                <div className="flex items-center gap-2 px-2 pb-2 text-xs font-semibold tracking-[0.18em] text-orange-950/70">
                   <IconTag className="h-4 w-4 text-orange-950/60" />
                   <span>CATEGORIES</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                  {CATEGORIES.map((cat) => (
-                    <a
-                      key={cat}
-                      href={`/#type-${slugify(cat)}`}
-                      className={[
-                        "group flex items-center justify-between gap-3",
-                        "rounded-xl px-3 py-2 text-sm text-orange-950/80",
-                        "hover:bg-orange-950/10 hover:text-orange-950",
-                      ].join(" ")}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setNavOpen(false);
-                      }}
-                      role="menuitem"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-950/35" />
-                        <span className="min-w-0 truncate">{cat}</span>
-                      </span>
-                      <IconChevronRight className="h-4 w-4 shrink-0 text-orange-950/40 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </a>
-                  ))}
-                </div>
+                {folders.length ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {folders.map((f) => {
+                      const href = `/category/${f.dir.split("/").map(encodeURIComponent).join("/")}`;
+                      const isActive = pathname === href;
+                      return (
+                        <Link
+                          key={f.dir}
+                          href={href}
+                          className={[
+                            "group flex items-center justify-between gap-3",
+                            "rounded-xl px-3 py-2 text-sm text-orange-950/80",
+                            "hover:bg-orange-950/10 hover:text-orange-950",
+                            isActive ? "bg-orange-950/10 text-orange-950" : "",
+                          ].join(" ")}
+                          onClick={() => setNavOpen(false)}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          role="menuitem"
+                          aria-label={`${f.folder} (${f.count})`}
+                          aria-current={isActive ? "page" : undefined}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-950/35" />
+                            <span className="min-w-0 truncate">{f.folder}</span>
+                            <span className="ml-1 text-xs font-semibold text-orange-950/50">
+                              {f.count}
+                            </span>
+                          </span>
+                          <IconChevronRight className="h-4 w-4 shrink-0 text-orange-950/40 opacity-0 transition-opacity group-hover:opacity-100" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-sm text-orange-950/60">
+                    No folders found in <span className="font-semibold">/public/photos</span>.
+                  </div>
+                )}
               </div>
             </motion.div>
           ) : null}
@@ -243,18 +217,26 @@ export function BottomNav() {
         >
           <Link
             href="/"
-            className="whitespace-nowrap rounded-full bg-orange-950/10 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold tracking-wide text-orange-950"
+            className={[
+              "whitespace-nowrap rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold tracking-wide",
+              isGallery ? "bg-orange-950/10 text-orange-950" : "text-orange-950/70 hover:bg-orange-950/10 hover:text-orange-950",
+            ].join(" ")}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setNavOpen(false)}
+            aria-current={isGallery ? "page" : undefined}
           >
             Gallery
           </Link>
 
           <Link
             href="/about"
-            className="whitespace-nowrap rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold tracking-wide text-orange-950/70 hover:bg-orange-950/10 hover:text-orange-950"
+            className={[
+              "whitespace-nowrap rounded-full px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold tracking-wide",
+              isAbout ? "bg-orange-950/10 text-orange-950" : "text-orange-950/70 hover:bg-orange-950/10 hover:text-orange-950",
+            ].join(" ")}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setNavOpen(false)}
+            aria-current={isAbout ? "page" : undefined}
           >
             About
           </Link>
@@ -268,12 +250,15 @@ export function BottomNav() {
               className={[
                 "whitespace-nowrap rounded-full px-3 sm:px-4 py-1.5 sm:py-2",
                 "text-xs sm:text-sm font-semibold tracking-wide",
-                "text-orange-950/70 hover:bg-orange-950/10 hover:text-orange-950",
+                isCategoryPage || navOpen
+                  ? "bg-orange-950/10 text-orange-950"
+                  : "text-orange-950/70 hover:bg-orange-950/10 hover:text-orange-950",
                 "inline-flex items-center gap-1.5",
               ].join(" ")}
               onClick={() => setNavOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={navOpen}
+              aria-current={isCategoryPage ? "page" : undefined}
             >
               Categories
               <IconChevronDown

@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IBM_Plex_Mono, Playfair_Display } from "next/font/google";
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 
 function IconCrosshair(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -20,49 +21,43 @@ function IconCrosshair(props: React.SVGProps<SVGSVGElement>) {
 
 type GalleryItem = {
   id: string;
+  src: string;
+  dir: string;
+  folder: string;
+  order: number;
   x: number; // world-space px
   y: number; // world-space px
   w: number; // px
   h: number; // px
   rotation: number; // deg
   shade: string; // tailwind class
-  date?: string;
-  category: string;
-  event?: string;
 };
 
 // Bigger virtual space to comfortably host 100–200+ items.
-const WORLD_SIZE = 8000;
+const DEFAULT_WORLD_SIZE = 8000;
 const CAPTION_GAP = 10;
 const CAPTION_HEIGHT = 22; // fixed caption height for consistent layout + collision math
 
-const CATEGORIES = [
-  "Nature",
-  "Portraits",
-  "Street",
-  "Architecture",
-  "Still Life",
-  "Abstract",
-  "Travel",
-  "Night",
-  "Minimal",
-  "Documentary",
-  "Macro",
-  "Conceptual",
-  "Motion",
-  "Landscapes",
-] as const;
+type PhotoEntry = {
+  src: string;
+  dir: string;
+  folder: string;
+  order: number;
+  file: string;
+  width: number | null;
+  height: number | null;
+};
 
-const EVENTS = [
-  "Graduation Day (Ottawa, 2021)",
-  "Studio Session Vol. 2",
-  "Desert Trip (2022)",
-  "Winter Walks",
-  "Summer Festival (2023)",
-  "Museum Afternoon",
-  "City Lights Night",
-  "Family Gathering",
-] as const;
+type GalleryCanvasPageProps = {
+  /** Optional filter: only show photos from this relative dir (e.g. "Art/Analog photography"). */
+  filterDir?: string;
+  /** World size in world-space px. Smaller world = denser/smaller canvas. */
+  worldSize?: number;
+  /** Center title text shown at the world origin. */
+  centerTitle?: string;
+  /** Center subtitle text shown under the title. */
+  centerSubtitle?: string;
+};
 
 const playfair = Playfair_Display({
   subsets: ["latin"],
@@ -98,18 +93,9 @@ function createSeededRng(seed: number) {
   };
 }
 
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .trim()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function wrapDeltaOnWorld(delta: number) {
-  // Smallest signed delta on a wrapping axis of length WORLD_SIZE.
-  return ((delta + WORLD_SIZE / 2) % WORLD_SIZE) - WORLD_SIZE / 2;
+function wrapDeltaOnWorld(delta: number, worldSize: number) {
+  // Smallest signed delta on a wrapping axis of length worldSize.
+  return ((delta + worldSize / 2) % worldSize) - worldSize / 2;
 }
 
 function wrapDeltaWithPeriod(delta: number, period: number) {
@@ -150,11 +136,20 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+      <div
+        className={[
+          "flex w-[min(96vw,1100px)] flex-col",
+          "h-[min(92vh,860px)]",
+          "rounded-2xl border border-white/10 bg-zinc-950",
+          "p-4 sm:p-6 shadow-2xl",
+        ].join(" ")}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-sm font-medium text-white/70">Selected</div>
-            <div className="text-lg font-semibold text-white">{item.id}</div>
+            <div className="text-lg font-semibold text-white">
+              {item.folder} • {item.order}
+            </div>
           </div>
           <button
             type="button"
@@ -165,18 +160,12 @@ function Modal({
           </button>
         </div>
 
-        <div className="mt-6 flex items-center justify-center">
-          <div
-            className={[
-              "rounded-2xl border border-white/10 shadow-[0_40px_120px_rgba(0,0,0,0.7)]",
-              item.shade,
-            ].join(" ")}
-            style={{
-              // Keep preview responsive on small screens.
-              width: `min(90vw, ${Math.round(item.w * 1.6)}px)`,
-              height: `min(60vh, ${Math.round(item.h * 1.6)}px)`,
-              transform: `rotate(${item.rotation}deg)`,
-            }}
+        <div className="mt-5 flex min-h-0 flex-1 items-center justify-center">
+          <img
+            src={item.src}
+            alt={`${item.folder} • ${item.order}`}
+            className="max-h-full w-auto max-w-full rounded-2xl border border-white/10 object-contain shadow-[0_40px_120px_rgba(0,0,0,0.7)]"
+            draggable={false}
           />
         </div>
       </div>
@@ -184,7 +173,13 @@ function Modal({
   );
 }
 
-export default function Page() {
+export function GalleryCanvasPage({
+  filterDir,
+  worldSize = DEFAULT_WORLD_SIZE,
+  centerTitle = "Alya's Art Universe",
+  centerSubtitle = "Drag to explore",
+}: GalleryCanvasPageProps) {
+  const WORLD_SIZE = worldSize;
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const worldRef = useRef<HTMLDivElement | null>(null);
   const worldScaleRef = useRef<HTMLDivElement | null>(null);
@@ -206,7 +201,7 @@ export default function Page() {
       </svg>
     `.trim();
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-  }, []);
+  }, [WORLD_SIZE]);
 
   // Responsive scale:
   // On small screens, we slightly "zoom out" so the world feels less cramped.
@@ -223,6 +218,11 @@ export default function Page() {
   const [selected, setSelected] = useState<GalleryItem | null>(null);
   const [showCenterButton, setShowCenterButton] = useState(false);
   const showCenterButtonRef = useRef(false);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [photosStatus, setPhotosStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const [loadedSrcs, setLoadedSrcs] = useState<Set<string>>(() => new Set());
+  const [viewportSize, setViewportSize] = useState({ w: 0, h: 0 });
+  const [renderOffset, setRenderOffset] = useState({ x: 0, y: 0 });
   const centerAnimRef = useRef<{
     startX: number;
     startY: number;
@@ -246,7 +246,56 @@ export default function Page() {
   const isInertiaRef = useRef(false);
   const lastRafTimeRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    const ac = new AbortController();
+    fetch("/api/photos", { signal: ac.signal })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        setPhotos(data as PhotoEntry[]);
+        setLoadedSrcs(new Set());
+        setPhotosStatus("loaded");
+      })
+      .catch(() => {
+        // ignore (offline / aborted / etc.)
+        setPhotosStatus((prev) => (prev === "loaded" ? prev : "error"));
+      });
+    return () => ac.abort();
+  }, []);
+
+  const placeholderItems = useMemo<GalleryItem[]>(() => {
+    if (photosStatus !== "loading") return [];
+    const rng = createSeededRng(777);
+    const shades = ["bg-red-950", "bg-slate-900", "bg-neutral-900", "bg-stone-500", "bg-blue-950"];
+    const list: GalleryItem[] = [];
+    const count = 24;
+    const margin = 360;
+    for (let i = 0; i < count; i++) {
+      const w = Math.round(160 + rng() * 260);
+      const h = Math.round(130 + rng() * 210);
+      const x = Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - w));
+      const y = Math.round(
+        margin + rng() * (WORLD_SIZE - margin * 2 - (h + CAPTION_GAP + CAPTION_HEIGHT)),
+      );
+      list.push({
+        id: `placeholder-${i}`,
+        src: "",
+        dir: "",
+        folder: "Loading",
+        order: i + 1,
+        x,
+        y,
+        w,
+        h,
+        rotation: Math.round((rng() - 0.5) * 10),
+        shade: shades[Math.floor(rng() * shades.length)] ?? "bg-neutral-900",
+      });
+    }
+    return list;
+  }, [photosStatus, WORLD_SIZE]);
+
   const items = useMemo<GalleryItem[]>(() => {
+    const usablePhotos = filterDir ? photos.filter((p) => p.dir === filterDir) : photos;
     const rng = createSeededRng(1337);
     const shades = [
       "bg-red-950",
@@ -266,8 +315,9 @@ export default function Page() {
       return iw * ih;
     };
 
-    // Target: 100–200 items. Keep it deterministic for stable layout.
-    const count = 160;
+    // If photos haven't loaded yet, render none (prevents placeholder mismatch).
+    const count = usablePhotos.length;
+    if (!count) return [];
     const margin = 320;
     const list: GalleryItem[] = [];
     // Tracks overlap pairing. If partner[i] !== null, item i is already overlapping one other item.
@@ -275,57 +325,52 @@ export default function Page() {
     // itself be overlapped by someone else (overlap graph is a matching: degree <= 1).
     const partner: Array<number | null> = [];
 
-    const monthNames = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
-    const randomDateLabel = () => {
-      const year = 2017 + Math.floor(rng() * 10); // 2017–2026
-      const month = monthNames[Math.floor(rng() * monthNames.length)] ?? "Jan";
-      return `${month} ${year}`;
-    };
-
     for (let i = 0; i < count; i++) {
+      const p = usablePhotos[i]!;
+      const ar = p.width && p.height ? p.width / p.height : 4 / 3;
+      const landscape = ar >= 1;
+
       // Size mix: mostly small, some medium, a few large (better for dense galleries).
+      // IMPORTANT: keep the photo's aspect ratio by sizing the frame from the image ratio.
       const r = rng();
+      const limits =
+        r < 0.08
+          ? { minW: 520, maxW: 940, minH: 380, maxH: 720 }
+          : r < 0.35
+            ? { minW: 300, maxW: 620, minH: 220, maxH: 480 }
+            : { minW: 170, maxW: 410, minH: 130, maxH: 330 };
+
+      const longEdge = Math.round(
+        (landscape ? limits.minW : limits.minH) +
+          rng() * ((landscape ? limits.maxW : limits.maxH) - (landscape ? limits.minW : limits.minH)),
+      );
+
       let baseW: number;
       let baseH: number;
-      if (r < 0.08) {
-        // large
-        baseW = Math.round(clamp(520 + rng() * 420, 520, 940));
-        baseH = Math.round(clamp(380 + rng() * 340, 380, 720));
-      } else if (r < 0.35) {
-        // medium
-        baseW = Math.round(clamp(300 + rng() * 320, 300, 620));
-        baseH = Math.round(clamp(220 + rng() * 260, 220, 480));
+      if (landscape) {
+        baseW = clamp(longEdge, limits.minW, limits.maxW);
+        baseH = Math.round(baseW / ar);
+        if (baseH > limits.maxH) {
+          baseH = limits.maxH;
+          baseW = Math.round(baseH * ar);
+        } else if (baseH < limits.minH) {
+          baseH = limits.minH;
+          baseW = Math.round(baseH * ar);
+        }
       } else {
-        // small
-        baseW = Math.round(clamp(170 + rng() * 240, 170, 410));
-        baseH = Math.round(clamp(130 + rng() * 200, 130, 330));
+        baseH = clamp(longEdge, limits.minH, limits.maxH);
+        baseW = Math.round(baseH * ar);
+        if (baseW > limits.maxW) {
+          baseW = limits.maxW;
+          baseH = Math.round(baseW / ar);
+        } else if (baseW < limits.minW) {
+          baseW = limits.minW;
+          baseH = Math.round(baseW / ar);
+        }
       }
+
       const rotation = Math.round((rng() - 0.5) * 10); // subtle organic tilt
       const shade = shades[Math.floor(rng() * shades.length)] ?? "bg-zinc-900";
-
-      // Metadata (deterministic). Some photos may not have date or event.
-      const hasDate = rng() < 0.78;
-      const hasEvent = rng() < 0.28;
-      const date = hasDate ? randomDateLabel() : undefined;
-      const category =
-        CATEGORIES[Math.floor(rng() * CATEGORIES.length)] ?? "Nature";
-      const event = hasEvent
-        ? (EVENTS[Math.floor(rng() * EVENTS.length)] ?? "Special Series")
-        : undefined;
 
       // --- Placement logic (strict overlap rules) ---
       // 1) No block covers >10% of another (axis-aligned approximation).
@@ -345,9 +390,39 @@ export default function Page() {
       const findPlacement = (w: number, h: number, attempts: number) => {
         const area = w * h;
         const totalH = h + CAPTION_GAP + CAPTION_HEIGHT;
+
+        // Bias placements to "surround" the center title so the first view feels populated.
+        // We sample from a ring around the center most of the time, with some uniform samples
+        // to keep the overall world evenly filled.
+        const sampleCandidate = () => {
+          const useRing = rng() < 0.82;
+          if (!useRing) {
+            return {
+              x: Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - w)),
+              y: Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - totalH)),
+            };
+          }
+
+          const cx = WORLD_SIZE / 2;
+          const cy = WORLD_SIZE / 2;
+
+          // Ring bounds (world-space px). Keep a minimum radius so we don't collide with the title box.
+          const minR = 380;
+          const maxR = 1600;
+          const ang = rng() * Math.PI * 2;
+          // Bias radius toward the inner edge so photos cluster closer to the title.
+          const r = Math.pow(rng(), 2) * (maxR - minR) + minR;
+
+          const rawX = cx + Math.cos(ang) * r - w / 2;
+          const rawY = cy + Math.sin(ang) * r - totalH / 2;
+
+          const x = Math.round(clamp(rawX, margin, WORLD_SIZE - margin - w));
+          const y = Math.round(clamp(rawY, margin, WORLD_SIZE - margin - totalH));
+          return { x, y };
+        };
+
         for (let attempt = 0; attempt < attempts; attempt++) {
-          const x = Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - w));
-          const y = Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - totalH));
+          const { x, y } = sampleCandidate();
 
           // Avoid placing directly on top of the center title region.
           const centerOverlap = overlapArea({ x, y, w, h: totalH }, centerExclusion);
@@ -444,16 +519,17 @@ export default function Page() {
 
       const newIndex = list.length;
       list.push({
-        id: `Piece ${newIndex + 1}`,
+        id: p.file,
+        src: p.src,
+        dir: p.dir,
+        folder: p.folder,
+        order: p.order,
         x: placement.x,
         y: placement.y,
         w: placement.w,
         h: placement.h,
         rotation,
         shade,
-        date,
-        category,
-        event,
       });
       partner.push(null);
 
@@ -464,7 +540,50 @@ export default function Page() {
     }
 
     return list;
-  }, []);
+  }, [photos, filterDir, WORLD_SIZE]);
+
+  const renderItems = items.length ? items : placeholderItems;
+
+  const visibleByTile = useMemo(() => {
+    const vw = viewportSize.w;
+    const vh = viewportSize.h;
+    if (!vw || !vh) return new Map<string, GalleryItem[]>();
+
+    // Viewport-based rendering / culling:
+    // Only render items whose SCREEN-SPACE bounds intersect the viewport (+ buffer),
+    // based on the current wrapped camera translate (renderOffset) and worldScale.
+    const bufferPx = 500;
+    const s = worldScale;
+
+    const isVisibleInTile = (it: GalleryItem, tx: number, ty: number) => {
+      const totalH = it.h + CAPTION_GAP + CAPTION_HEIGHT;
+
+      // Screen-space top-left of this item's container in the given tile.
+      // worldRef translates by renderOffset (screen px), and worldScaleRef scales world units by s.
+      const x1 = renderOffset.x + (tx * WORLD_SIZE + it.x) * s;
+      const y1 = renderOffset.y + (ty * WORLD_SIZE + it.y) * s;
+      const x2 = x1 + it.w * s;
+      const y2 = y1 + totalH * s;
+
+      // AABB intersection with viewport extended by buffer.
+      return (
+        x2 >= -bufferPx &&
+        x1 <= vw + bufferPx &&
+        y2 >= -bufferPx &&
+        y1 <= vh + bufferPx
+      );
+    };
+
+    const map = new Map<string, GalleryItem[]>();
+    for (const ty of [-1, 0, 1]) {
+      for (const tx of [-1, 0, 1]) {
+        const key = `${tx},${ty}`;
+        const vis = renderItems.filter((it) => isVisibleInTile(it, tx, ty));
+        map.set(key, vis);
+      }
+    }
+    return map;
+  }, [renderItems, renderOffset.x, renderOffset.y, viewportSize.w, viewportSize.h, worldScale, WORLD_SIZE]);
 
   useLayoutEffect(() => {
     // Disable page scrollbars (full-screen canvas feel).
@@ -485,6 +604,7 @@ export default function Page() {
     const applyScaleAndMaybeCenter = (opts?: { center?: boolean }) => {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      setViewportSize({ w: vw, h: vh });
       const s = computeScale();
       setWorldScale(s);
       worldScaleRefValue.current = s;
@@ -531,7 +651,7 @@ export default function Page() {
       document.documentElement.style.overflow = prevOverflow;
       document.body.style.overflow = prevBodyOverflow;
     };
-  }, []);
+  }, [WORLD_SIZE]);
 
   useEffect(() => {
     let raf = 0;
@@ -607,8 +727,8 @@ export default function Page() {
       const vh = window.innerHeight;
       const viewCenterWorldX = ((vw / 2 - displayX) / s + WORLD_SIZE * 10) % WORLD_SIZE;
       const viewCenterWorldY = ((vh / 2 - displayY) / s + WORLD_SIZE * 10) % WORLD_SIZE;
-      const dxWorld = wrapDeltaOnWorld(viewCenterWorldX - WORLD_SIZE / 2);
-      const dyWorld = wrapDeltaOnWorld(viewCenterWorldY - WORLD_SIZE / 2);
+      const dxWorld = wrapDeltaOnWorld(viewCenterWorldX - WORLD_SIZE / 2, WORLD_SIZE);
+      const dyWorld = wrapDeltaOnWorld(viewCenterWorldY - WORLD_SIZE / 2, WORLD_SIZE);
       const distScreen = Math.hypot(dxWorld * s, dyWorld * s);
       const nextShow = distScreen > 240;
       if (nextShow !== showCenterButtonRef.current) {
@@ -628,12 +748,19 @@ export default function Page() {
         worldRef.current.style.transform = `translate3d(${displayX}px, ${displayY}px, 0)`;
       }
 
+      // Keep a lightweight React snapshot of the camera translate for viewport culling.
+      // This does NOT change movement; it's only for deciding what to render.
+      setRenderOffset((prev) => {
+        if (Math.abs(prev.x - displayX) < 0.5 && Math.abs(prev.y - displayY) < 0.5) return prev;
+        return { x: displayX, y: displayY };
+      });
+
       raf = window.requestAnimationFrame(tick);
     };
 
     raf = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(raf);
-  }, [isDragging]);
+  }, [isDragging, WORLD_SIZE]);
 
   const endDrag = () => {
     activePointerIdRef.current = null;
@@ -850,120 +977,135 @@ export default function Page() {
                     }}
                   />
 
-                  {/* Organic, scattered blocks (absolute positioning only) */}
-                  {items.map((it) => (
-                    <div
-                      key={`${tx},${ty}:${it.id}`}
-                      className="absolute"
-                      style={{
-                        left: it.x,
-                        top: it.y,
-                        width: it.w,
-                        height: it.h + CAPTION_GAP + CAPTION_HEIGHT,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        draggable={false}
-                        className={[
-                          "absolute left-0 top-0 rounded-2xl border border-white/10 shadow-lg",
-                          "transition-transform duration-200 ease-out hover:scale-[1.03]",
-                          "active:scale-[0.99]",
-                          it.shade,
-                        ].join(" ")}
-                        style={{
-                          width: it.w,
-                          height: it.h,
-                          transform: `rotate(${it.rotation}deg)`,
-                        }}
-                        onClick={() => {
-                          // Avoid opening when the user intended to drag.
-                          if (performance.now() < suppressClickUntilRef.current) return;
-                          setSelected(it);
-                        }}
-                        aria-label={`Open ${it.id}`}
-                      >
-                        <span className="sr-only">{it.id}</span>
-                      </button>
-
-                      {/* Title under each photo (fixed font size, dot-separated parts). */}
+                  {/* Organic, scattered blocks (viewport culled; absolute positioning only) */}
+                  {(visibleByTile.get(`${tx},${ty}`) ?? []).map((it) => {
+                    const isPlaceholder = !it.src;
+                    const isLoaded = !isPlaceholder && loadedSrcs.has(it.src);
+                    return (
                       <div
-                        className={`${plexMono.className} absolute left-0 text-center text-[11px] font-medium leading-[22px] tracking-[0.12em] text-orange-950/90`}
+                        key={`${tx},${ty}:${it.id}`}
+                        className="absolute"
                         style={{
-                          top: it.h + CAPTION_GAP,
+                          left: it.x,
+                          top: it.y,
                           width: it.w,
-                          height: CAPTION_HEIGHT,
-                          transform: `rotate(${it.rotation}deg)`,
-                          transformOrigin: "50% 0%",
+                          height: it.h + CAPTION_GAP + CAPTION_HEIGHT,
                         }}
                       >
-                        <div className="mx-auto w-full overflow-hidden text-ellipsis whitespace-nowrap px-1">
-                          {(() => {
-                            const parts: React.ReactNode[] = [];
+                        <button
+                          type="button"
+                          draggable={false}
+                          className={[
+                            "absolute left-0 top-0 overflow-hidden rounded-2xl border border-white/10 shadow-lg",
+                            "transition-transform duration-200 ease-out hover:scale-[1.03]",
+                            "active:scale-[0.99]",
+                            it.shade,
+                          ].join(" ")}
+                          style={{
+                            width: it.w,
+                            height: it.h,
+                            transform: `rotate(${it.rotation}deg)`,
+                          }}
+                          onPointerDown={(e) => {
+                            // Don't let the viewport's drag pointer-capture steal the click on desktop.
+                            e.stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            // Prevent text selection / drag ghost image on desktop.
+                            e.preventDefault();
+                          }}
+                          onClick={() => {
+                            // Avoid opening when the user intended to drag.
+                            if (performance.now() < suppressClickUntilRef.current) return;
+                            if (!isPlaceholder) setSelected(it);
+                          }}
+                          aria-label={`Open ${it.id}`}
+                        >
+                          {/* Per-tile skeleton: stays until this specific image is loaded */}
+                          {!isLoaded ? (
+                            <div className="absolute inset-0 animate-pulse bg-white/10" />
+                          ) : null}
 
-                            if (it.date) {
+                          {!isPlaceholder ? (
+                            <img
+                              src={it.src}
+                              alt={`${it.folder} • ${it.order}`}
+                              className={[
+                                // The frame matches the photo's aspect ratio, so this fills without cropping.
+                                "block h-full w-full object-cover transition-opacity duration-300",
+                                isLoaded ? "opacity-100" : "opacity-0",
+                              ].join(" ")}
+                              draggable={false}
+                              loading="lazy"
+                              onLoad={() => {
+                                setLoadedSrcs((prev) => {
+                                  if (prev.has(it.src)) return prev;
+                                  const next = new Set(prev);
+                                  next.add(it.src);
+                                  return next;
+                                });
+                              }}
+                            />
+                          ) : null}
+                        </button>
+
+                        {/* Title under each photo (fixed font size, dot-separated parts). */}
+                        <div
+                          className={`${plexMono.className} absolute left-0 text-center text-[11px] font-medium leading-[22px] tracking-[0.12em] text-orange-950/90`}
+                          style={{
+                            top: it.h + CAPTION_GAP,
+                            width: it.w,
+                            height: CAPTION_HEIGHT,
+                            transform: `rotate(${it.rotation}deg)`,
+                            transformOrigin: "50% 0%",
+                          }}
+                        >
+                          <div className="mx-auto w-full overflow-hidden text-ellipsis whitespace-nowrap px-1">
+                            {(() => {
+                              const parts: React.ReactNode[] = [];
+
                               parts.push(
-                                <span key="date" className="font-medium">
-                                  {it.date}
-                                </span>,
-                              );
-                            }
-
-                            // 2nd part (category) is clickable (future navigation).
-                            parts.push(
-                              <a
-                                key="cat"
-                                href={`/#type-${slugify(it.category)}`}
-                                onClick={(e) => {
-                                  // Placeholder now; you'll wire to real routes later.
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                                className="font-semibold underline-offset-4 hover:underline"
-                                aria-label={`Filter by ${it.category}`}
-                              >
-                                {it.category}
-                              </a>,
-                            );
-
-                            // 3rd part (event) is optional + clickable if present.
-                            if (it.event) {
-                              parts.push(
-                                <a
-                                  key="event"
-                                  href={`/#event-${slugify(it.event)}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  }}
+                                <Link
+                                  key="folder"
+                                  href={
+                                    it.dir
+                                      ? `/category/${it.dir.split("/").map(encodeURIComponent).join("/")}`
+                                      : "/"
+                                  }
+                                  onClick={(e) => e.stopPropagation()}
                                   onPointerDown={(e) => e.stopPropagation()}
-                                  className="font-medium underline-offset-4 hover:underline"
-                                  aria-label={`View event ${it.event}`}
+                                  className="font-semibold underline-offset-4 hover:underline"
+                                  aria-label={`Folder ${it.folder}`}
                                 >
-                                  {it.event}
-                                </a>,
+                                  {it.folder}
+                                </Link>,
                               );
-                            }
 
-                            return parts.flatMap((node, idx) => {
-                              if (idx === 0) return [node];
-                              return [
-                                <span
-                                  key={`dot-${idx}`}
-                                  className="mx-2 pb-1 inline-block align-middle text-[15px] leading-0 text-orange-950/60"
-                                  aria-hidden="true"
-                                >
-                                  •
+                              parts.push(
+                                <span key="order" className="font-medium">
+                                  {it.order}
                                 </span>,
-                                node,
-                              ];
-                            });
-                          })()}
+                              );
+
+                              return parts.flatMap((node, idx) => {
+                                if (idx === 0) return [node];
+                                return [
+                                  <span
+                                    key={`dot-${idx}`}
+                                    className="mx-2 pb-1 inline-block align-middle text-[15px] leading-0 text-orange-950/60"
+                                    aria-hidden="true"
+                                  >
+                                    •
+                                  </span>,
+                                  node,
+                                ];
+                              });
+                            })()}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Center text anchored in world-space (not fixed to screen) */}
                   {tx === 0 && ty === 0 ? (
@@ -978,12 +1120,12 @@ export default function Page() {
                       <div
                         className={`${playfair.className} text-5xl italic font-semibold tracking-tight text-orange-950`}
                       >
-                        Alya&apos;s Art Universe
+                        {centerTitle}
                       </div>
                       <div
                         className={`${playfair.className} mt-3 text-lg italic text-orange-950`}
                       >
-                        Drag to explore
+                        {centerSubtitle}
                       </div>
                     </div>
                   ) : null}
@@ -1020,4 +1162,8 @@ export default function Page() {
       />
     </>
   );
+}
+
+export default function Page() {
+  return <GalleryCanvasPage />;
 }
