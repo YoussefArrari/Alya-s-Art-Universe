@@ -56,17 +56,13 @@ export default function AboutPage() {
               />
 
               <div className="relative p-6 sm:p-10">
-                <div className={`${plexMono.className} text-xs tracking-[0.22em] text-orange-950/70`}>
-                  A LETTER FROM
-                </div>
+
                 <h1 className={`${playfair.className} mt-3 text-4xl sm:text-5xl italic font-semibold tracking-tight text-orange-950`}>
-                  Alya
+                  About Alya
                 </h1>
 
                 <div className="mt-6 space-y-5 text-[15px] leading-7 text-orange-950/85">
-                  <p className={`${playfair.className} italic text-lg text-orange-950/80`}>
-                    Dear visitor,
-                  </p>
+
 
                   <p>
                     Alya Bouslama (she/her) is an Ottawa-based photographer working across artistic, event, and institutional photography. Born and raised in Tunis, Tunisia, she first picked up a camera by following in her father’s footsteps and quickly turned image-making into a way of understanding the world around her.
@@ -80,14 +76,7 @@ export default function AboutPage() {
                     She is completing a Bachelor’s degree in Visual Arts and Communications at the University of Ottawa and continues to explore photography as a way of observing, connecting, and making sense of the world.
                   </p>
 
-                  <div className="pt-2">
-                    <p className={`${playfair.className} italic text-lg text-orange-950/80`}>
-                      With warmth,
-                    </p>
-                    <p className={`${playfair.className} mt-1 text-2xl italic font-semibold text-orange-950`}>
-                      Alya
-                    </p>
-                  </div>
+
                 </div>
 
                 <div className="mt-8 flex flex-wrap items-center gap-3">
