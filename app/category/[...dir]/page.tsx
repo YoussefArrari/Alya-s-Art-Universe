@@ -13,7 +13,7 @@ export default async function CategoryPage({
   return (
     <GalleryCanvasPage
       filterDir={filterDir}
-      worldSize={3600}
+      worldSize={2600}
       centerTitle={folderName}
       centerSubtitle="Drag to explore"
     />

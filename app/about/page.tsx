@@ -17,8 +17,8 @@ export default function AboutPage() {
   return (
     <main className="min-h-svh bg-red-50 px-4 py-10 sm:py-14">
       <div className="mx-auto w-full max-w-[1100px]">
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-[340px_1fr] sm:gap-10">
-          {/* Portrait column */}
+        <div className="grid grid-cols-1 gap-6  sm:gap-10">
+          {/* Portrait column 
           <aside className="relative">
             <div className="rounded-3xl border border-orange-950/15 bg-white/50 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.10)] backdrop-blur-sm">
               <div className="overflow-hidden rounded-2xl border border-orange-950/15 bg-white">
@@ -33,7 +33,7 @@ export default function AboutPage() {
                 PORTFOLIO • ABOUT
               </div>
             </div>
-          </aside>
+          </aside>*/}
 
           {/* Letter column */}
           <section className="relative">
@@ -69,19 +69,15 @@ export default function AboutPage() {
                   </p>
 
                   <p>
-                    Welcome to my little universe. I’m <span className="font-semibold">Alya</span>, and this space is my
-                    portfolio made to feel like wandering through a drawer of prints, notes, and moments that mattered.
+                    Alya Bouslama (she/her) is an Ottawa-based photographer working across artistic, event, and institutional photography. Born and raised in Tunis, Tunisia, she first picked up a camera by following in her father’s footsteps and quickly turned image-making into a way of understanding the world around her.
                   </p>
 
                   <p>
-                    I love images that look like they’ve lived a life: soft grain, imperfect edges, and stories hiding in
-                    the quiet parts. Sometimes I work in crisp color, sometimes in black and white always chasing a
-                    feeling more than a “perfect” frame.
+                    Her work moves between people, spaces, and landscapes, drawn to light, movement, and the quiet energy of everyday moments. Alongside her artistic practice, she works as an event and campus photographer, documenting formal events, games, and university life.
                   </p>
 
                   <p>
-                    If you’re here, take your time. Drag around, open a piece, and let your eyes rest. This gallery is
-                    meant to be explored slowly—like reading a letter twice, just to catch what you missed the first time.
+                    She is completing a Bachelor’s degree in Visual Arts and Communications at the University of Ottawa and continues to explore photography as a way of observing, connecting, and making sense of the world.
                   </p>
 
                   <div className="pt-2">

@@ -318,7 +318,8 @@ export function GalleryCanvasPage({
     // If photos haven't loaded yet, render none (prevents placeholder mismatch).
     const count = usablePhotos.length;
     if (!count) return [];
-    const margin = 320;
+    // Smaller worlds (category pages) should pack tighter.
+    const margin = Math.round(clamp(WORLD_SIZE * 0.04, 120, 340));
     const list: GalleryItem[] = [];
     // Tracks overlap pairing. If partner[i] !== null, item i is already overlapping one other item.
     // This enforces your rule: no photo can be overlapped by 2 photos, and no overlapping photo can
@@ -338,11 +339,13 @@ export function GalleryCanvasPage({
           ? { minW: 520, maxW: 940, minH: 380, maxH: 720 }
           : r < 0.35
             ? { minW: 300, maxW: 620, minH: 220, maxH: 480 }
-            : { minW: 170, maxW: 410, minH: 130, maxH: 330 };
+            : { minW: 220, maxW: 480, minH: 170, maxH: 380 };
 
+      // For the "small" tier, bias a bit larger so tiles don't feel tiny.
+      const sizeRand = r < 0.35 ? rng() : Math.sqrt(rng());
       const longEdge = Math.round(
         (landscape ? limits.minW : limits.minH) +
-          rng() * ((landscape ? limits.maxW : limits.maxH) - (landscape ? limits.minW : limits.minH)),
+        sizeRand * ((landscape ? limits.maxW : limits.maxH) - (landscape ? limits.minW : limits.minH)),
       );
 
       let baseW: number;
@@ -380,12 +383,25 @@ export function GalleryCanvasPage({
       const maxAttempts = 6000;
 
       // Keep a bit of breathing room around the center title area.
+      // Keep a bit of breathing room around the center title area.
+      // Scale with world size so category pages don't exclude too much space.
+      const exclW = Math.round(Math.min(1300, WORLD_SIZE * 0.52));
+      const exclH = Math.round(Math.min(440, WORLD_SIZE * 0.22));
       const centerExclusion = {
-        x: WORLD_SIZE / 2 - 650,
-        y: WORLD_SIZE / 2 - 220,
-        w: 1300,
-        h: 440,
+        x: WORLD_SIZE / 2 - exclW / 2,
+        y: WORLD_SIZE / 2 - exclH / 2,
+        w: exclW,
+        h: exclH,
       };
+
+      // Placement "density" controls (tighter for smaller counts).
+      const useRingProb = count < 40 ? 0.92 : count < 90 ? 0.86 : 0.80;
+      const minR = Math.max(260, Math.round(Math.max(exclW, exclH) * 0.48));
+      const maxR = Math.min(
+        WORLD_SIZE * 0.38,
+        count < 40 ? 980 : count < 90 ? 1320 : 1650,
+      );
+      const boxR = Math.min(WORLD_SIZE * 0.46, maxR + 420);
 
       const findPlacement = (w: number, h: number, attempts: number) => {
         const area = w * h;
@@ -393,28 +409,27 @@ export function GalleryCanvasPage({
 
         // Bias placements to "surround" the center title so the first view feels populated.
         // We sample from a ring around the center most of the time, with some uniform samples
-        // to keep the overall world evenly filled.
+        // (but still near center) to keep things organic.
         const sampleCandidate = () => {
-          const useRing = rng() < 0.82;
-          if (!useRing) {
-            return {
-              x: Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - w)),
-              y: Math.round(margin + rng() * (WORLD_SIZE - margin * 2 - totalH)),
-            };
-          }
+          const useRing = rng() < useRingProb;
 
           const cx = WORLD_SIZE / 2;
           const cy = WORLD_SIZE / 2;
 
-          // Ring bounds (world-space px). Keep a minimum radius so we don't collide with the title box.
-          const minR = 380;
-          const maxR = 1600;
-          const ang = rng() * Math.PI * 2;
-          // Bias radius toward the inner edge so photos cluster closer to the title.
-          const r = Math.pow(rng(), 2) * (maxR - minR) + minR;
+          let rawX: number;
+          let rawY: number;
 
-          const rawX = cx + Math.cos(ang) * r - w / 2;
-          const rawY = cy + Math.sin(ang) * r - totalH / 2;
+          if (useRing) {
+            const ang = rng() * Math.PI * 2;
+            // Bias radius toward the inner edge so photos cluster closer to the title.
+            const r = Math.pow(rng(), 2) * (maxR - minR) + minR;
+            rawX = cx + Math.cos(ang) * r - w / 2;
+            rawY = cy + Math.sin(ang) * r - totalH / 2;
+          } else {
+            // "Uniform" sample, but still near the center (prevents huge white space).
+            rawX = cx + (rng() * 2 - 1) * boxR - w / 2;
+            rawY = cy + (rng() * 2 - 1) * boxR - totalH / 2;
+          }
 
           const x = Math.round(clamp(rawX, margin, WORLD_SIZE - margin - w));
           const y = Math.round(clamp(rawY, margin, WORLD_SIZE - margin - totalH));
